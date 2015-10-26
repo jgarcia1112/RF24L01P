@@ -10,6 +10,7 @@
 // J. Garcia @ 16 Sep 2015, TAB. MEX.
 // Creado el 16 de Sept 2015
 // Modificado el 08 de Oct 2015 - en etapa de desarrollo
+// Modificado el 25 de Oct 2015 - en fase de pruebas (Arduino Uno y Arduino Nano)
 //
 // AVISO: ESTE AUN ES UN DESARROLLO PARCIAL. EL OBJETO CLASE DE ESTE DISPOSITIVO CONTINUA EN DESARROLLO
 // Y AUN SE TIENEN ALGUNAS CARACTERISTICAS IMPORTANTES EN ESPERA, POR FAVOR TENGA ESTO EN CUENTA.
@@ -61,7 +62,6 @@
 #define RF_ENAA_P2_BIT         2
 #define RF_ENAA_P1_BIT         1
 #define RF_ENAA_P0_BIT         0
-#define EnableAckOnAllPipes    0x3F
 
 // posiciones del bit en el registro EN_RXADDR
 #define RF_EN_RXADDR           0x02
@@ -71,7 +71,6 @@
 #define RF_ERX_P2_BIT          2
 #define RF_ERX_P1_BIT          1
 #define RF_ERX_P0_BIT          0
-#define EnableErxOnAllPipes    0x3F
 
 // posiciones del bit en el registro SETUP_AW
 #define RF_SETUP_AW            0x03
@@ -105,7 +104,6 @@
 #define RF_DPL_P2_BIT          2
 #define RF_DPL_P1_BIT          1
 #define RF_DPL_P0_BIT          0
-#define EnableDplOnAllPipes    0x3F
 
 // posiciones del bit en el registro SETUP_RETR
 #define RF_SETUP_RETR          0x04
@@ -133,17 +131,9 @@
 #define RF_RX_ADDR_P4          0x0E
 #define RF_RX_ADDR_P5          0x0F
 
-
 // mapa de los registros del modulo
 #define RF_TX_ADDR             0x10
 #define RF_FIFO_ST             0x17
-
-
-// Modos de operacion del modulo RF
-#define RX_MODE                0
-#define TX_MODE                1
-#define STBY_MODE              2
-#define PWR_DOWN_MODE          3
 
 // Velocidades de transmision de datos en el aire
 #define DATARATE_1Mbps      0x00
@@ -187,36 +177,25 @@ class RF24L01P {
 public:
     
     RF24L01P(uint8_t CE_pin, uint8_t CSN_Pin);
+    bool dataFlag = false;
     void initialize();
-    void setPowerDown();
-    void setEnhancedShockBurstDynamic();
+    void setChecksum(uint8_t value = 2);
     void setRate(uint8_t value = DATARATE_2Mbps);
     void setRadioFrequency(uint8_t value = 40);
     void setTXLevel(uint8_t value = TX_LEVEL_00dBm);
     void setDeviceAddress(uint8_t Addr1, uint8_t Addr2, uint8_t Addr3, uint8_t Addr4, uint8_t Addr5);
     void setPRXmode();
-    void setPTXmode(uint8_t value = PTX01);
-    void setPipeChannel(uint8_t pipe);
-
-
+    void setPTXmode(uint8_t channel = PTX01);
     bool receive(void* rxData, uint8_t* ptxSender, uint8_t packetSize);
     bool send(const void* txData, uint8_t packetSize);
-    void sendPulse(uint8_t value);
-    bool testDevice();
-    void initDeviceAddress();
-    void setChecksum(uint8_t value = 2);
-    void setDynamicFeature(bool value = true);
-    bool getDynamicFeature();
-    void setAutoAckOnPipe(uint8_t pipe = PTXAll, uint8_t turn = HIGH);
-    void setDynamicPayloadOnPipe(uint8_t pipe = PTXAll, uint8_t turn = HIGH);
-    void setRxAddressOnPipe(uint8_t pipe = PTXAll, uint8_t turn = HIGH);
-    uint8_t getLostPackets();
-    uint8_t getRetriesPackets();
+    bool send_noAck(const void* txData, uint8_t packetSize);
+    void get_ackPayload(void* rxData, uint8_t packetSize); // complemento de send
+    void send_ackPayload(const void* txData, uint8_t pipeChannel, uint8_t packetSize); // complemento de Receive)
 
 
 
     // ***************************
-    // de prueba
+    // de prueba  (en desarrollo)
     //
             void tx(const void *txData, uint8_t packetSize);
     //
@@ -224,41 +203,38 @@ public:
     
     
     
-    void setAutoRetransmit(uint8_t tries = 5, uint16_t timelapsed = 4000);
-    void setEnhancedShockBurstStatic();
+    
+
+private:
+    uint8_t CEpin, CSNpin;
+    void setPipeChannel(uint8_t pipe);
+    void sendPulse(uint8_t value);
+    void setEnhancedShockBurstDynamic();
+    void initDeviceAddress();
+    void setDynamicFeature(bool value = true);
+    void setAutoAckOnPipe(uint8_t pipe = PTXAll, uint8_t turn = HIGH);
+    void setDynamicPayloadOnPipe(uint8_t pipe = PTXAll, uint8_t turn = HIGH);
+    void setRxAddressOnPipe(uint8_t pipe = PTXAll, uint8_t turn = HIGH);
+    void setAutoRetransmit(uint8_t tries = 15, uint16_t timelapsed = 1500);
+    void setPowerDown();
+    //bool testDevice();
+    bool getDynamicFeature();
+    uint8_t setDevice(uint8_t regAddr, uint8_t* pBuff, uint8_t len);
+    uint8_t getDevice(uint8_t regAddr, uint8_t* pBuff, uint8_t len);
+    uint8_t getLostPackets();
+    uint8_t getRetriesPackets();
     uint8_t getChecksum();
     uint8_t getFifoCount();
     uint8_t getTXLevel();
     uint8_t getReceivedPowerDetector();
     uint8_t getRadioFrequency();
     uint8_t getRate();
-    uint8_t setDevice(uint8_t regAddr, uint8_t* pBuff, uint8_t len);
-    uint8_t getDevice(uint8_t regAddr, uint8_t* pBuff, uint8_t len);
+
     
 
-private:
-    uint8_t CEpin, CSNpin;
-//    uint8_t buffer[5];
-//    uint8_t devAddress[5]; // = {0x78,0x78,0x78,0x78,0x78};
 };
 
 #endif // _RF24L01P_H_
-
-
-
-/*
- void SoftwareSerial::setRX(uint8_t rx)
- {
- pinMode(rx, INPUT);
- if (!_inverse_logic)
- digitalWrite(rx, HIGH);  // pullup for normal logic!
- _receivePin = rx;
- _receiveBitMask = digitalPinToBitMask(rx);
- uint8_t port = digitalPinToPort(rx);
- _receivePortRegister = portInputRegister(port);
- }
-*/
-
 
 
 
