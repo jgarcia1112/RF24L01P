@@ -10,6 +10,7 @@
 // J. Garcia @ 16 Sep 2015, TAB. MEX.
 // Creado el 16 de Sept 2015
 // Modificado el 08 de Oct 2015 - en etapa de desarrollo
+// Modificado el 25 de Oct 2015 - en fase de pruebas (Arduino Uno y Arduino Nano)
 //
 // AVISO: ESTE AUN ES UN DESARROLLO PARCIAL. EL OBJETO CLASE DE ESTE DISPOSITIVO CONTINUA EN DESARROLLO
 // Y AUN SE TIENEN ALGUNAS CARACTERISTICAS IMPORTANTES EN ESPERA, POR FAVOR TENGA ESTO EN CUENTA.
@@ -24,20 +25,28 @@
  as published by the Free Software Foundation.
  */
 
-/**
- * @file RF24L01P.cpp
- *
- */
+// ****************************************************************************
+//
+//      @file RF24L01P.cpp
+//
+//      Esta libreria, contempla el uso del modulo de RF usando las
+//      caractetisticas del Enhanced ShockBurst™ con Dynamic Payload.
+//      No utiliza compatibilidad con modelos anteriores, y esta diseñado para
+//      trabajar en el modo 1:6 (Multiceiver), es decir un PRX y seis PTX.
+//
+//      En el Skecth solo hay que definir cual modulo va a estar en modo PRX
+//      y para cada PTX se le va indicando con el numero PTX01, PTX02..PTX06.
+//
+// ****************************************************************************
 
-//#include "Arduino.h"
+
+
 #include <SPI.h>
 #include "RF24L01P.h"
 
 static uint8_t devAddress[] = { 0x78, 0x78, 0x78, 0x78, 0x78 };
 static uint8_t buffer[]     = { 0x0, 0x0, 0x0, 0x0, 0x0 };
-
-
-
+static bool noAck = false;
 
 
 
@@ -84,7 +93,17 @@ RF24L01P::RF24L01P(uint8_t CE_pin, uint8_t CSN_Pin) {
 
 // ****************************************************************************
 //
-//      Funcion para inicializar el dispositivo y los ajustes por default
+//      Funcion para inicializar el modulo RF con los ajustes por default
+//
+//  Por default deja habilitadas las funciones del EnhancedShockBurstDynamic
+//  Con una velocidad de datos de 2Mbps
+//  Transmitiendo en la frecuencia de 2440 MHz (2.44 GHz)
+//  Con una potencia de transmision de 00 dBi
+//  Y con una direccion de dispositivo de 120,120,120,120, dejando preconfiguradas
+//  las direcciones de todos los canales (pipes).
+//
+//  Todos estos parametros son configurables despues de haber inicializado
+//  el modulo.
 //
 // ****************************************************************************
 //
@@ -92,12 +111,10 @@ void RF24L01P::initialize()
 {
     setPowerDown();
     setEnhancedShockBurstDynamic();
-    //////SetEnhancedShockBurstStatic();
     setRate();
-    setRadioFrequency(); //41
+    setRadioFrequency();
     setTXLevel();
     initDeviceAddress();
-    //setDeviceAddress(120,120,120,120,120);
 
 }
 //
@@ -105,7 +122,7 @@ void RF24L01P::initialize()
 
 
 
-
+/*
 // ****************************************************************************
 //
 //      Funcion para realizar autoprueba del dispositivo conectado por SPI
@@ -136,6 +153,9 @@ bool RF24L01P::testDevice()
 }
 //
 // ****************************************************************************
+*/
+
+
 
 
 
@@ -144,20 +164,43 @@ bool RF24L01P::testDevice()
 
 // ****************************************************************************
 //
-//    Transmision de datos con ventana de tiempo de espera (PTX mode)
+//    PTX MODE
 //
-// devuelve verdadero si se recibe confrmacion del envio, y devuelve la cantidad de carga recibida.
-// devuelve falso si se alcanzo el maximo de re-intentos sin respuesta de confirmacion
-// y se descarta el paquete vaciando el TX_FIFO!
+//    -Transmision de datos (PRX mode) con o sin confirmacion (ack)
+//    -Extraccion de datos recibidos con ACK (Ack_PayLoad)
 //
+// Con la funcion: send(,,)
+// devuelve verdadero si los datos se enviaron con o sin datos de regreso (ack)
+// devuelve falso si no se logro tener respuesta por parte del receptor.
+//
+// Con la funcion: send_noAck(,,)
+// devuelve siempre verdadero, pues no se espera confirmacion por parte del
+// receptor, y de igual forma, no se podran recibir datos de regreso porque
+// no hay confirmacion (ack)
+//
+// Con la funcion: get_ackPayload(,,)
+// se extraen los datos que vienen con la confirmacion (ack payload) y los
+// devuelve por parametro.  Esto sucedera siempre y cuando la bandera (dataflag)
+// sea verdadera. Con esa bandera, podemos saber si hay datos de regreso cada
+// vez que se realiza un envio con confirmacion.
+//
+//
+//      POR HACER:
+//              VALIDAR QUE EL TAMAÑO DEL PAQUETE NO EXCEDA LOS 32 BYTES
 //
 // ****************************************************************************
 //
+bool RF24L01P::send_noAck(const void* txData, uint8_t packetSize)
+{
+    noAck = true;
+    send(txData, packetSize);
+    return true;
+}
 bool RF24L01P::send(const void* txData, uint8_t packetSize)
 {
     uint8_t st;
     const int8_t *pTxData = (const int8_t*)txData;
-
+    
     // ***************************************************************
     //
     //    carga el FIFO con datos y manda el pulso para su envio.
@@ -171,7 +214,7 @@ bool RF24L01P::send(const void* txData, uint8_t packetSize)
                     // escribe los datos en el FIFO
                     digitalWrite(CSNpin,LOW);
                     SPI.beginTransaction(nRF24);
-                    SPI.transfer( RF_W_TX_PAYLOAD );
+                    SPI.transfer( (noAck==true ? RF_W_TX_PAYLOAD_NO_ACK:RF_W_TX_PAYLOAD) );
     
                     while ( packetSize-- ) SPI.transfer(*pTxData++);
     
@@ -184,8 +227,8 @@ bool RF24L01P::send(const void* txData, uint8_t packetSize)
     //
     // ***************************************************************
     
-
-
+    
+    if (!noAck) {
     // ***************************************************************
     //
     //    Ventana de tiempo para esperar confirmacion.
@@ -200,7 +243,7 @@ bool RF24L01P::send(const void* txData, uint8_t packetSize)
                 st = (getDevice(ReadCmd | RF_STATUS, buffer, 1)>>4);
                 if (st) break;
             }
-            // entrara en STBY-I al terminar de procesar los IRQ que se hayan disparado.
+            // Al terminar de procesar los IRQ que se hayan disparado, entrara en STBY-I.
             // En el peor de los escenarios, si no encuentra respuesta con el maximo de intentos,
             // con el maximo de tiempo entre intentos, y con la maxima  carga de datos y
             // con la maxima velocidad (2Mbps) de envio, transcurriran menos de 60-70 milisegundos.
@@ -209,21 +252,22 @@ bool RF24L01P::send(const void* txData, uint8_t packetSize)
             sendPulse(LOW);
     //
     // ***************************************************************
+        
+    
+    
+        // ***************************************************************
+        //
+        //  resetea los bits d TX_DS, RX_DR, MAX_RT para dejarlos disponibles
+        //
+        // ***************************************************************
+        //
+                buffer[0] |= B01110000;
+                setDevice((WriteCmd | RF_STATUS), buffer, 1);
+        //
+        // ***************************************************************
 
-    
-    // ***************************************************************
-    //
-    //  resetea los bits d TX_DS, RX_DR, MAX_RT para dejarlos disponibles
-    //
-    // ***************************************************************
-    //
-            buffer[0] |= B01110000;
-            setDevice((WriteCmd | RF_STATUS), buffer, 1);
-    //
-    // ***************************************************************
-    
-    
-
+        
+        
     // ***************************************************************
     //
     //  Revisamos el estatus que nos dejo el disparo del IRQ y
@@ -239,6 +283,7 @@ bool RF24L01P::send(const void* txData, uint8_t packetSize)
             //      -Vaciamos el buffer para dejarlo disponible.-
             //
                     getDevice((RF_FLUSH_TX), buffer, 0);
+                    dataFlag = false;
                     return false;
             //
             // ***************************************************************
@@ -249,7 +294,9 @@ bool RF24L01P::send(const void* txData, uint8_t packetSize)
             //
             //  TX_DS esta habilitado quiere decir que
             //  ya se realizo el envio y no hay datos de regreso.
+            //
             // ***************************************************************
+                    dataFlag = false;
                     return true;
             //
             // ***************************************************************
@@ -261,150 +308,56 @@ bool RF24L01P::send(const void* txData, uint8_t packetSize)
             //  TX_DS  &  RX_DR  estan habilitados, entonces quiere decir que
             //  ya se realizo el envio pero hay datos de regreso disponibles
             //
-            //
-            //  POR HACER:
-            //
-            //         DEVOLVER LOS DATOS QUE VENGAN CON EL ACK
-            //
-            //
             // ***************************************************************
+                    dataFlag = true;
                     return true;
             //
             // ***************************************************************
     }
-    
-    else    {
-            // ***************************************************************
-            //
-            //  si hay algo diferente a lo anterior manda falso, asi que
-            //  circulando, circulando!!!
-            //
-            // ***************************************************************
-                    return false;
-            //
-            // ***************************************************************
     }
-     
-        
     // ***************************************************************
     //
-    //  El RF se queda en STBY-I hasta que reciba nueva carga para enviar.
+    //  El RF se queda en STBY-I hasta que reciba nueva carga para enviar,
+    //  y desactivamos el modo noAck (por si acaso estuviera activado)
     //
     // ***************************************************************
-}
-//
-// ****************************************************************************
-
-
-
-
-
-// ****************************************************************************
-//
-//      Funcion para generar el pulso de envio de RadioFrecuencia
-//
-// ****************************************************************************
-//
-void RF24L01P::sendPulse(uint8_t value)
-{
-    if ( value == HIGH )
-    {
-        digitalWrite(CEpin, HIGH);
-    }
-    
-    else //( value == LOW )
-    {
-        digitalWrite(CEpin, LOW);
-    }
-}
-//
-// ****************************************************************************
-
-
-
-
-
-
-
-
-
-// ****************************************************************************
-//
-//      Procedimiento en desarrollo, para envios mayores a 32 bytes!!
-//
-//      Pretendo hacer fragmentos de paquetes de 32 bytes, de momento maximo
-//      serian solo 8 paquetes, enviando en total 256 bytes!
-//      Necesito un byte de control para que el remitente sepa cuantos bytes
-//      espera recibir y hacer la confirmacion. Creo que seria algo como una
-//      transmision en streaming. (aun ando viendo eso).
-//
-// ****************************************************************************
-//
-void RF24L01P::tx(const void *txData, uint8_t packetSize)
-{
-
-    uint8_t st, fragmentPacket, fifoCount = 0;
-    const int8_t *pTxData = (const int8_t*)txData;
-    
-    fragmentPacket = ((packetSize + MAXFIFOSIZE - 1) >> 5);
-    
-    //memcpy(fifoBuff, (const int8_t *)txData, len);
-    
-    // manda el MicroPulso de envio para transmitir.
-    // probablemente se quede en STBY-II en lo que se estan
-    // enviando los paquetes en fragmentos (si es que son mas de uno).
-    // De momento, maximo son 8 fragmentos de 32bytes cada uno = 256 bytes!
-    sendPulse(HIGH);
-
-    
-    SPI.beginTransaction(nRF24);
-    while ( fragmentPacket-- )
-    {
-        // manda el pulso bajo, para escribir la carga a transmitir
-        //sendPulse(LOW);
-        
-        
-        // escribe los datos en el FIFO
-        digitalWrite(CSNpin,LOW);
-        //SPI.beginTransaction(nRF24);
-        //st = SPI.transfer( RF_W_TX_PAYLOAD );
-        //SPI.transfer( RF_W_TX_PAYLOAD );
-        SPI.transfer( RF_W_TX_PAYLOAD_NO_ACK );
-        
-        
-        
-        st = 0;
-        while (true)
-        {
-            SPI.transfer(*(pTxData+fifoCount));
-            fifoCount++; st++;
-            if ( (fifoCount >= packetSize) || (st >= MAXFIFOSIZE) ) break;
-        }
-        
-        
-        
-        //SPI.endTransaction();
-        digitalWrite(CSNpin,HIGH);
-        
-        
-        
-        // manda el MicroPulso de envio para transmitir.
-        //sendPulse(HIGH);
-        //delayMicroseconds(10);
-
-    }
-    SPI.endTransaction();
-
-    // manda el pulso bajo, para escribir la carga a transmitir
     sendPulse(LOW);
+    noAck = false;
+}
+//
+// ****************************************************************************
 
+// ***************************************************************
+//
+// Estoy en modo PTX y si tengo un ACK con Payload tengo que
+// obtener los datos de respuesta que vienen con el ACK (esto sucedera cuando
+// la bandera (dataFlag) sea verdadera!.
+//
+// ***************************************************************
+void RF24L01P::get_ackPayload(void* rxData, uint8_t packetSize)
+{
+
+    receive(rxData, 0, packetSize);
     
+    // Solo se pueden contener 3 cargas de datos con ACK, si se
+    // llega a ese limite, hay que liberar el RX_FIFO y tambien hay que
+    // liberar el bit MAX_RT del IRQ para poder continuar con la exreaccion
+    // de los datos!
+    //
+    // Esto sucede porque no se esta solicitando la extraccion de los
+    // datos a tiempo!.  Dependiendo de la forma como se utilice, lo ideal
+    // seria que cada que ve que hace un envio, se verifique si hay datos
+    // de regreso para exreaerlos. De lo contrario, solamente nos dara el
+    // ultimo dato que se haya quedado en la cola!.
+    getDevice((RF_FLUSH_RX), buffer, 0);
     
-    /*
-    Serial.print("tamaño del dato recibido: LEN: ");
-    Serial.print(packetSize);     Serial.print("  pTxData: ");
-    Serial.println(sizeof(&pTxData));
-    */
+    // resetea los bits d TX_DS, RX_DR, MAX_RT para dejarlos disponibles
+    buffer[0] |= B01110000;
+    setDevice((WriteCmd | RF_STATUS), buffer, 1);
+
+
+    dataFlag = false;
+
 }
 //
 // ****************************************************************************
@@ -417,18 +370,23 @@ void RF24L01P::tx(const void *txData, uint8_t packetSize)
 
 
 
-
-
-
-
-
 // ****************************************************************************
 //
-//    Recepcion de datos (PRX mode)
+//    PRX MODE
 //
-// devuelve verdadero si se recibe confrmacion del envio, y devuelve la cantidad de carga recibida.
-// ---devuelve falso si se alcanzo el maximo de re-intentos sin respuesta de confirmacion
-// ---y se descarta el paquete vaciando el TX_FIFO!
+//    -Recepcion de datos (PRX mode)
+//    -Envio de datos con ACK (Ack_PayLoad)
+//
+// Con la funcion: receive(,,,)
+// devuelve verdadero si se recibe confrmacion del envio, y devuelve por parametro
+// la cantidad de carga recibida asi como el remitente.
+//
+// Con la funcion: send_ackPayload(,,,)
+// se realiza el envio de datos al remitente junto con la confirmacion (Ack)
+//
+//
+//      POR HACER:
+//              VALIDAR QUE EL TAMAÑO DEL PAQUETE NO EXCEDA LOS 32 BYTES
 //
 // ****************************************************************************
 //
@@ -488,7 +446,7 @@ bool RF24L01P::receive(void* rxData, uint8_t* ptxSender, uint8_t packetSize)
                         SPI.endTransaction();
                         digitalWrite(CSNpin,HIGH);
             
-            
+
                         // Resetea los bits TX_DS, RX_DR y MAX_RT para dejarlos disponibles
                         getDevice(ReadCmd | RF_STATUS, buffer, 1);
                         buffer[0] |= B01110000;
@@ -506,11 +464,160 @@ bool RF24L01P::receive(void* rxData, uint8_t* ptxSender, uint8_t packetSize)
     
 
         // si no es nada de lo anterior, regresa falso
-        //getDevice((RF_FLUSH_RX), buffer, 0);
         return false;
 }
 //
 // ****************************************************************************
+// ****************************************************************************
+//
+// Estoy en modo PRX y para enviar datos de regreso hay que cargar en el fifo
+// los datos en el canal correcto (pipe) para que asi se pueda enviar junto
+// con la confirmacion (ack).
+//
+// ****************************************************************************
+//
+void RF24L01P::send_ackPayload(const void* txData, uint8_t pipeChannel, uint8_t packetSize)
+{
+    const int8_t *pTxData = (const int8_t*)txData;
+    
+    // ***************************************************************
+    //
+    //    carga el FIFO con datos y manda el pulso para su envio.
+    //
+    // ***************************************************************
+    
+            // escribe los datos en el FIFO
+            digitalWrite(CSNpin,LOW);
+            SPI.beginTransaction(nRF24);
+            SPI.transfer( (RF_W_ACK_PAYLOAD | pipeChannel) );
+    
+            while ( packetSize-- ) SPI.transfer(*pTxData++);
+    
+            SPI.endTransaction();
+            digitalWrite(CSNpin,HIGH);
+    
+    //
+    // ***************************************************************
+}
+//
+// ****************************************************************************
+
+
+
+
+
+
+// ****************************************************************************
+//
+//      Funcion para generar el pulso de envio de RadioFrecuencia
+//
+// ****************************************************************************
+//
+void RF24L01P::sendPulse(uint8_t value)
+{
+    if ( value == HIGH )
+    {
+        digitalWrite(CEpin, HIGH);
+    }
+    
+    else //( value == LOW )
+    {
+        digitalWrite(CEpin, LOW);
+    }
+}
+//
+// ****************************************************************************
+
+
+
+
+
+
+
+// ****************************************************************************
+//
+//      Procedimiento en desarrollo, para envios mayores a 32 bytes!!
+//
+//      Pretendo hacer fragmentos de paquetes de 32 bytes, de momento maximo
+//      serian solo 8 paquetes, enviando en total 256 bytes!
+//      Necesito un byte de control para que el remitente sepa cuantos bytes
+//      espera recibir y hacer la confirmacion. Creo que seria algo como una
+//      transmision en streaming. (aun ando viendo eso).
+//
+// ****************************************************************************
+//
+void RF24L01P::tx(const void *txData, uint8_t packetSize)
+{
+    
+    uint8_t st, fragmentPacket, fifoCount = 0;
+    const int8_t *pTxData = (const int8_t*)txData;
+    
+    fragmentPacket = ((packetSize + MAXFIFOSIZE - 1) >> 5);
+    
+    //memcpy(fifoBuff, (const int8_t *)txData, len);
+    
+    // manda el MicroPulso de envio para transmitir.
+    // probablemente se quede en STBY-II en lo que se estan
+    // enviando los paquetes en fragmentos (si es que son mas de uno).
+    // De momento, maximo son 8 fragmentos de 32bytes cada uno = 256 bytes!
+    sendPulse(HIGH);
+    
+    
+    SPI.beginTransaction(nRF24);
+    while ( fragmentPacket-- )
+    {
+        // manda el pulso bajo, para escribir la carga a transmitir
+        //sendPulse(LOW);
+        
+        
+        // escribe los datos en el FIFO
+        digitalWrite(CSNpin,LOW);
+        //SPI.beginTransaction(nRF24);
+        //st = SPI.transfer( RF_W_TX_PAYLOAD );
+        //SPI.transfer( RF_W_TX_PAYLOAD );
+        SPI.transfer( RF_W_TX_PAYLOAD_NO_ACK );
+        
+        
+        
+        st = 0;
+        while (true)
+        {
+            SPI.transfer(*(pTxData+fifoCount));
+            fifoCount++; st++;
+            if ( (fifoCount >= packetSize) || (st >= MAXFIFOSIZE) ) break;
+        }
+        
+        
+        
+        //SPI.endTransaction();
+        digitalWrite(CSNpin,HIGH);
+        
+        
+        
+        // manda el MicroPulso de envio para transmitir.
+        //sendPulse(HIGH);
+        //delayMicroseconds(10);
+        
+    }
+    SPI.endTransaction();
+    
+    // manda el pulso bajo, para escribir la carga a transmitir
+    sendPulse(LOW);
+    
+    
+    
+    /*
+     Serial.print("tamaño del dato recibido: LEN: ");
+     Serial.print(packetSize);     Serial.print("  pTxData: ");
+     Serial.println(sizeof(&pTxData));
+     */
+}
+//
+// ****************************************************************************
+
+
+
+
 
 
 
@@ -558,12 +665,20 @@ void RF24L01P::setEnhancedShockBurstDynamic()
     //
     // Los intentos (ART) van desde 1 hasta 15 veces.
     //
-    // El tiempo de espera (ARD) entre cada intento va desde 250 microsegundos hasta
-    // 4000 microsegundos en incrementos de 250.
+    // El tiempo de espera (ARD) entre cada intento van desde 250 microsegundos hasta
+    // 4000 microsegundos en incrementos de 250 microsegundos.
+    //
+    // Los valores optimos segun la hoja de datos son:
+    //      Para velocidades de 1Mbps o 2MBps = 500 Microsegundos (tiempo
+    //      suficientemente largo para cualquier tamaño de datos)
+    //
+    //      Para velocidades de 250KBps = 1500 Microsegundos (tiempo
+    //      suficientemente largo para cualquier tamaño de datos)
     //
     // Mas info -->> datasheet pagina 33 y 34, tabla 18.
     //
-    // Por default queda en 05 reintentos con 4000 microseg entre reintentos.
+    //
+    // Por default queda en 15 reintentos con 500 microseg entre reintentos.
     // tiempo suficiente para velocidades de (1Mbsp o 2Mbps) con cualquier
     // longitud de carga recibida.
     //
@@ -602,7 +717,7 @@ void RF24L01P::setEnhancedShockBurstDynamic()
     
     // ***************************************************************
     //
-    // Habilita la recepcion de direccion (RX Addresses) en cada canal (Pipe)
+    // Habilita la recepcion de direccion (RX Addresses) en cada canal
     // caracteristica principal del Enhanced ShockBurst™. (EN_RXADDR)
     // Por default se lo dejamos activado en todos los canales (Pipes)
     //
@@ -621,9 +736,9 @@ void RF24L01P::setChecksum(uint8_t value)
     // El CRC (Cyclic Redundancy Check) lo dejo preparado a 16 bits
     // para que cuando se habilite el (EN_AA) ya tengamos el valor listo
     getDevice((ReadCmd | RF_CONFIG), buffer, 1);
-        if (value = 1)       bitWrite(buffer[0], RF_CRCO_BIT, 0);  // CRC =  8 bits
-        else if (value = 2)  bitWrite(buffer[0], RF_CRCO_BIT, 1);  // CRC = 16 bits
-        else                 bitWrite(buffer[0], RF_CRCO_BIT, 1);  // CRC = 16 bits
+        if (value == 1)       bitWrite(buffer[0], RF_CRCO_BIT, 0);  // CRC =  8 bits
+        else if (value == 2)  bitWrite(buffer[0], RF_CRCO_BIT, 1);  // CRC = 16 bits
+        else                  bitWrite(buffer[0], RF_CRCO_BIT, 1);  // CRC = 16 bits
     setDevice((WriteCmd | RF_CONFIG), buffer, 1);
 }
 uint8_t RF24L01P::getChecksum()
@@ -639,6 +754,7 @@ void RF24L01P::setDynamicFeature(bool value)
         if (value) buffer[0] |= B00000111;
         else       buffer[0] &= B11111000;
     setDevice((WriteCmd | RF_FEATURE), buffer, 1);
+
 }
 bool RF24L01P::getDynamicFeature()
 {
@@ -693,7 +809,9 @@ void RF24L01P::setRxAddressOnPipe(uint8_t pipe, uint8_t turn)
 void RF24L01P::setAutoRetransmit(uint8_t tries, uint16_t timelapsed)
 {
     // Se le indica cuantas veces debe re-intentar y el tiempo de espera entre cada intento
-    timelapsed = (getRate() == DATARATE_250Kbps ? 1500:timelapsed);
+    // si la velocidad es de 250KBps, el tiempo maximo sera de 1500 Microsegundos)
+    timelapsed = (getRate() == DATARATE_250Kbps && timelapsed < 1500 ? 1500:timelapsed);
+    //timelapsed = (getRate() == DATARATE_250Kbps ? 1500:timelapsed);
     timelapsed = timelapsed >> 8;
     
     buffer[0] = ((timelapsed << 4) | tries); setDevice((WriteCmd | RF_SETUP_RETR), buffer, 1);
@@ -702,27 +820,6 @@ void RF24L01P::setAutoRetransmit(uint8_t tries, uint16_t timelapsed)
 // ****************************************************************************
 
 
-
-
-
-// ****************************************************************************
-//
-//    Enhanced ShockBurst Static
-//
-// ****************************************************************************
-//
-void RF24L01P::setEnhancedShockBurstStatic()
-{
-    //como no puedo saber cuantos bytes voy a transmitir, de momento lo dejo por default con 1 byte estatico.
-    //En ambos lados (TX/RX) debe ser el mismo tamaño, habra que modificar directamente aqui el codigo y cargarlo en ambos modulos
-    //de no hacerlo, estaria enviando un tren de datos de byte por byte. Tratare de hacer un
-    //algoritmo para que cuando un dato sea de mas de un Byte, lo transmita uno por uno
-    //(algo ineficiente) porque para esto esta el Dynamic.
-    
-    //mientras queda pendiente esta funcion
-}
-//
-// ****************************************************************************
 
 
 
@@ -758,6 +855,7 @@ uint8_t RF24L01P::getFifoCount()
 
 
 
+
 // ****************************************************************************
 //
 //    Registro OBSERVE_TX, para el conteo de paquetes perdidos y reintentos
@@ -787,7 +885,7 @@ uint8_t RF24L01P::getRetriesPackets()
 
 // ****************************************************************************
 //
-//    Asignacion de Direccion (Address) del Modulo RF
+//    Asignacion de Direccion (Address) del Modulo RF de forma manual
 //
 // ****************************************************************************
 //
@@ -795,24 +893,7 @@ void RF24L01P::setDeviceAddress(uint8_t Addr1, uint8_t Addr2, uint8_t Addr3, uin
 {
     // ***************************************************************
     //
-    // Confirguramos la longitud de la direccion (SETUP_AW  0x03) a 40bits.
-    // A aprtir de esta direccion, se asignan las direcciones al resto de
-    // los canales (pipes) y debe ser unica para cada canal.
-    //
-    // Por default lo dejamos configurado con longitud de 5 bytes (40bits).
-    //
-    // ***************************************************************
-    //
-            getDevice((ReadCmd | RF_SETUP_AW), buffer, 1);
-            buffer[0] |=  B00000011;
-            setDevice((WriteCmd | RF_SETUP_AW), buffer, 1);
-    //
-    // ***************************************************************
-
-    
-    // ***************************************************************
-    //
-    // Almacenamos la direccion en una variable privada.
+    // Almacenamos la direccion proporcionada en una variable privada.
     //
     // Por default, desde la inicializacion, tiene asignada la direccion:
     //          "120,120,120,120,120"
@@ -825,23 +906,6 @@ void RF24L01P::setDeviceAddress(uint8_t Addr1, uint8_t Addr2, uint8_t Addr3, uin
     //
     // ***************************************************************
     
-    
-    // ****************************************************************************
-    //
-    // El direccionamiento final queda asi; -con la direccion: "120,120,120,120,120"-
-    //
-    //          RX_ADDR_P0 = 120:120:120:120:120 = PTX01
-    //          RX_ADDR_P1 = 120:120:120:120:190 = PTX02
-    //          RX_ADDR_P2 = 120:120:120:120:189 = PTX03
-    //          RX_ADDR_P3 = 120:120:120:120:188 = PTX04
-    //          RX_ADDR_P4 = 120:120:120:120:187 = PTX05
-    //          RX_ADDR_P5 = 120:120:120:120:186 = PTX06
-    //
-    //  *"PTX??"*  es el "alias" del nodo, donde "??" es numero del canal (Pipe).
-    //
-    // ****************************************************************************
-
-
 }
 //
 // ****************************************************************************
@@ -849,9 +913,11 @@ void RF24L01P::setDeviceAddress(uint8_t Addr1, uint8_t Addr2, uint8_t Addr3, uin
 
 
 
+
+
 // ****************************************************************************
 //
-//    Inicializador de la direccion (Address) por default del modulo RF
+//    Inicializador de la direccion (Address) del modulo RF por default.
 //
 // ****************************************************************************
 //
@@ -881,6 +947,22 @@ void RF24L01P::initDeviceAddress()
             devAddress[4] = 120;
     //
     // ***************************************************************
+    
+    // ****************************************************************************
+    //
+    // El direccionamiento final queda asi; -con la direccion: "120,120,120,120,120"-
+    //
+    //          RX_ADDR_P0 = 120:120:120:120:120 = PTX01
+    //          RX_ADDR_P1 = 120:120:120:120:190 = PTX02
+    //          RX_ADDR_P2 = 120:120:120:120:189 = PTX03
+    //          RX_ADDR_P3 = 120:120:120:120:188 = PTX04
+    //          RX_ADDR_P4 = 120:120:120:120:187 = PTX05
+    //          RX_ADDR_P5 = 120:120:120:120:186 = PTX06
+    //
+    //  *"PTX??"*  es el "alias" del nodo, donde "??" es numero del canal (Pipe).
+    //
+    // ****************************************************************************
+    
 }
 //
 // ***************************************************************
@@ -888,14 +970,17 @@ void RF24L01P::initDeviceAddress()
 
 
 
+
+
 // ****************************************************************************
 //
-//    Canal de comunicacion Logica (Pipe)
+//    Seleccion de Canal de comunicacion Logica (Pipe)
 //
 // ****************************************************************************
 //
 void RF24L01P::setPipeChannel(uint8_t Pipe)
 {
+
     if ( Pipe == PTX01 )
     {
             // ***************************************************************
@@ -906,7 +991,7 @@ void RF24L01P::setPipeChannel(uint8_t Pipe)
             //
                     memcpy(buffer, devAddress, 5);
                     setDevice((WriteCmd | RF_TX_ADDR), buffer, 5);
-
+        
                     getDevice((ReadCmd  | RF_TX_ADDR),   buffer, 5);
                     setDevice((WriteCmd | RF_RX_ADDR_P0),buffer, 5);
             //
@@ -963,7 +1048,7 @@ void RF24L01P::setPipeChannel(uint8_t Pipe)
 
                     getDevice((ReadCmd  | RF_TX_ADDR),   buffer, 5);
                     setDevice((WriteCmd | RF_RX_ADDR_P0),buffer, 5);
-            //
+           //
             // ***************************************************************
     }
     
@@ -1007,8 +1092,8 @@ void RF24L01P::setPipeChannel(uint8_t Pipe)
     {
             // ***************************************************************
             //
-            // De momento, al entrar en modo PRX todos los canales se les configura
-            // con las caracteristicas del Enhanced ShockBurst™
+            // Todos los canales se configuran con las caracteristicas del
+            // Enhanced ShockBurst™
             //
             // Dejamos asignada las direcciones de cada canal en modo PRX,
             // de esta forma esta listo para recibir en los 6 canales.
@@ -1036,27 +1121,6 @@ void RF24L01P::setPipeChannel(uint8_t Pipe)
             //
             // ***************************************************************
     }
-/*
-    Serial.println();
-    getDevice(((ReadCmd | RF_STATUS) ), buffer, 1);
-    Serial.print("ST: 0x"); Serial.print(buffer[0],HEX);
-    Serial.print(" -PTX:0"); Serial.print(Pipe+1);
-    Serial.print(" - 678-Node tx: ");
-    getDevice((ReadCmd  | RF_TX_ADDR),   buffer, 5);
-    Serial.print(buffer[0]); Serial.print(":");
-    Serial.print(buffer[1]); Serial.print(":");
-    Serial.print(buffer[2]); Serial.print(":");
-    Serial.print(buffer[3]); Serial.print(":");
-    Serial.print(buffer[4]); Serial.print(" - rx: ");
-    getDevice((ReadCmd  | RF_RX_ADDR_P0), buffer, 5);
-    Serial.print(buffer[0]); Serial.print(":");
-    Serial.print(buffer[1]); Serial.print(":");
-    Serial.print(buffer[2]); Serial.print(":");
-    Serial.print(buffer[3]); Serial.print(":");
-    Serial.print(buffer[4]); Serial.println();
-    getDevice((WriteCmd | 0x14), buffer, 1);
-    Serial.print(buffer[0]); Serial.print(":");
-*/
 }
 //
 // ****************************************************************************
@@ -1338,6 +1402,9 @@ void RF24L01P::setPRXmode()
 
 
 
+
+
+
 // ****************************************************************************
 //
 //    Comandos SPI de Acceso al Modulo RF
@@ -1362,13 +1429,15 @@ uint8_t RF24L01P::getDevice(uint8_t regAddr, uint8_t* pBuff, uint8_t len)
     digitalWrite(CSNpin, LOW);
     SPI.beginTransaction(nRF24);
     SPI.transfer(regAddr);
-    for (uint8_t i = 0; i < len+1; i++) { pBuff[i] = SPI.transfer(0x00); }
+    for (uint8_t i = 0; i < len; i++) { pBuff[i] = SPI.transfer(0x00); }
     SPI.endTransaction();
     digitalWrite(CSNpin, HIGH);
     return pBuff[0];
 }
 //
 // ****************************************************************************
+
+
 
 
 
