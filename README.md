@@ -20,3 +20,7 @@ muchos dispositivos que a diario nos rodean.
 
 Posteriormente publicare los ejemplos en Arduino usando esta libreria. y tratare en lo posible, estar alimentando este espacio, 
 sobre todo, un espacio para los que se nos hace dificil el ingles!.
+
+Modificacion 25 de Octubre 2015. 
+Se le han agregado funciones que permiten usarlo en modo multiceiver 1:6 y esta en etapa de pruebas, las cuales han sido muy satisfactorias.
+Pronto estare probando con los sensores que usare en mi proyecto y seguire compartiando siempre que pueda, el codigo y los ejemplos para continuar con su desarrollo.
