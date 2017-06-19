@@ -1,4 +1,20 @@
 # arduino
+Domingo 18 Junio 1027:
+
+  - He actualizado mi codigo fuente de este modulo NRF24L01+
+  
+  No esta completo, aun lo sigo depurando, sin embargo esta a tu disposicion si te hes de utilidad, y sin ningun tipo de garantia.
+  
+  Estos archivos los ire cambiando sin previo aviso conforme lo vaya mejorando.
+  
+  
+  - Actualmente, se puede usar en modo uno a uno , utilizando los ajustes que trae por defecto el modulo.
+  - Esta hecho de modo que funciona con el ESB activado, cargas dinamicas y auto-confirmacion.
+  
+  Espero te sea de utilidad y bienvenidas las modificaciones!!.. 
+  
+  -------------------------------------------------------------------------------------------------------------
+
 Coleccion de codigo fuente para arduino. De Tabasco, Mexico, para el Mundo
 
 Estoy haciendo un proyecto que tengo en mente de telemetria. 
