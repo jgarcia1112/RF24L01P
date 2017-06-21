@@ -1,4 +1,22 @@
 # arduino
+Miercoles 21 de Junio 2017:
+
+  Nuevas correcciones, y mejoras.
+  
+    - Ya se puede usar en modo estrella 1:6, tan sencillo como poner uno en modo Rx y los demas en modo Tx.
+    
+    - Cada dispotivio Tx es un canal logico, asi que solamente se inicializa como :  channel1, channel2, ... channel6.
+    
+    - El receptor se puede iniciar (startRx) y detener (stop) en cualquier momento segun lo desees.
+    
+    - Todo esta configurado hasta ahora, para que funcione con los valores que trae por default, asi que basicamente es de instalar y usar.
+    
+    Seguire trabajando y programando en este maravilloso mundo de Arduino para hacer aportaciones, compartir y mejorar.
+    
+    
+    
+    -------------------------------------------------------------------------------------------------------------
+
 Domingo 18 Junio 1027:
 
   - He actualizado mi codigo fuente de este modulo NRF24L01+
