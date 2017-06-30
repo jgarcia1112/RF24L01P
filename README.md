@@ -7,7 +7,7 @@ Miercoles 21 de Junio 2017:
     
     - Cada dispotivio Tx es un canal logico, asi que solamente se inicializa como :  channel1, channel2, ... channel6.
     
-    - El receptor se puede iniciar (startRx) y detener (stop) en cualquier momento segun lo desees.
+    - El receptor se puede iniciar (startRx) y detener (standby) en cualquier momento segun lo desees.
     
     - Todo esta configurado hasta ahora, para que funcione con los valores que trae por default, asi que basicamente es de instalar y usar.
     
