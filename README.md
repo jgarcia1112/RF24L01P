@@ -1,4 +1,5 @@
-# arduino
+# arduino nRF24L01+
+
 Viernes 30 de Junio 2017:
 
 Algunos cambios en la libretia, no muy impactantes asi que ya lo voy haciendo mas estable.
