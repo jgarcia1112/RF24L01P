@@ -1,4 +1,18 @@
 # arduino
+Viernes 30 de Junio 2017:
+
+Algunos cambios en la libretia, no muy impactantes asi que ya lo voy haciendo mas estable.
+
+- incluyo un ejemplo del TX y el RX, probado en Arduino Nano, Uno y Mega.
+  -Para el caso del Mega, el modulo RF lo tuve que conectar a 5v del Mega porque con los 3.3v tiene un comportamiento erratico.
+  (el manual del modulo dice que aunque funciona con 3.3v, es tolerante a 5v.)
+  
+- Estare en un periodo de probar el resto de las funciones, aunque en lo particular a mi me funciona y me es suficiente para el 
+proyecto que voy a realizar.
+
+
+-----------------------------------------------------------------------------------------------------------------------------------
+
 Miercoles 21 de Junio 2017:
 
   Nuevas correcciones, y mejoras.
